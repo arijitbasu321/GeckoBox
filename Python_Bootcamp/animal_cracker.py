@@ -1,10 +1,7 @@
 def animal_crackers(text):
-    text_list = text.split()
+    text_list = text.lower().split()
 
-    if text_list[0][0] == text_list[1][0]:
-        return True
-    else:
-        return False
+    return text_list[0][0] == text_list[1][0]:
 
 
 user_input = input("enter two words ")
