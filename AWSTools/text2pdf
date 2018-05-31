@@ -1,0 +1,25 @@
+#!/bin/python
+
+import sys
+
+text_file = sys.argv[1]
+
+pdf_file = sys.argv[2]
+
+from reportlab.pdfgen import canvas
+
+c = canvas.Canvas(pdf_file)
+
+f = open( text_file, 'r')
+
+i = 800
+for x in f:
+    c.drawString(50, i, x)
+    i -= 12
+    if i <= 20:
+        i = 800
+        c.showPage()
+
+c.save()
+
+f.close()

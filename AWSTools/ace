@@ -1,0 +1,142 @@
+#!/bin/python
+#
+#  Script: ACE
+#  Function: interaccts with AWS cost explorer to retrieve cost information
+#  Version : 0.1.0
+#  Python : 2.7
+
+# import modules
+
+import sys, boto3, subprocess
+
+# Display warning message
+
+user_agreed = raw_input("WARNING: This tool interacts with AWS cost explorer API, which is a chargable service. Do you wish to continue?[Yes/No]: ")
+
+if user_agreed.lower() != "yes":
+    sys.exit(1)
+
+# Take user input
+
+start_date = raw_input("Please enter a start date[yyyy-mm-dd]: ")
+end_date = raw_input("Please enter an end date[yyyy-mm-dd]: ")
+
+
+# Retrieve dimensions details:
+
+client = boto3.client('ce')
+
+dimensions = client.get_dimension_values(
+    TimePeriod={
+        'Start' : start_date,
+        'End' : end_date
+    },
+    Dimension='SERVICE',
+    Context='COST_AND_USAGE'
+)
+
+
+list_of_dimensions = [ str(x['Value']) for x in dimensions['DimensionValues'] ]
+
+list_of_dimensions += ['Total']
+
+
+# Generate report 
+
+print(' ')
+
+print('Generating report, please wait...')
+
+print(' ')
+
+report = []   
+    
+for y in list_of_dimensions:
+    if y != 'Total':
+        data = client.get_cost_and_usage(TimePeriod={ 'Start': start_date, 'End': end_date}, Granularity= 'MONTHLY', Filter={ 'Dimensions': { "Key": "SERVICE", "Values": [ y ]}}, Metrics=[ 'BlendedCost' ])
+        data_list = data['ResultsByTime']
+        for i in data_list:
+            data_dict = i
+            month = str(data_dict['TimePeriod']['Start'])
+            amount = float(data_dict['Total']['BlendedCost']['Amount'])
+            report += [month + " : "+ y  + ' : '+ "%.2f" % amount + " USD"]
+    else:
+        data = client.get_cost_and_usage(TimePeriod={ 'Start': start_date, 'End': end_date}, Granularity= 'MONTHLY', Metrics=[ 'BlendedCost' ])
+        data_list = data['ResultsByTime']
+        for e in data_list:
+            data_dict = e
+            month = str(data_dict['TimePeriod']['Start'])
+            amount = float(data_dict['Total']['BlendedCost']['Amount'])
+            report += [month + " : "+ y  + ' : '  + "%.2f" % amount + " USD"]
+
+# print output
+pdffile = ' ' + '\n'
+print('##################################')
+pdffile += '##################################\n' 
+print('----AWS COST EXPLORER - REPORT----')
+pdffile += '----AWS COST EXPLORER - REPORT----\n'
+print('##################################')
+pdffile += '##################################\n' 
+print(' ')
+pdffile += ' ' + '\n'
+account_id = boto3.client('sts').get_caller_identity()['Account']
+print('AWS Account : ' + account_id)
+pdffile += 'AWS Account : ' + account_id + '\n'
+print(' ')
+pdffile += ' ' + '\n'
+
+
+for z in sorted(report):
+    if 'Total' in z:
+        print(z)
+        print(' ')
+        pdffile += z + '\n'
+        pdffile += ' ' '\n'
+    else:
+        print(z)
+        pdffile += z + '\n'
+
+with open('ace_report.txt', 'w') as f:
+    f.write(pdffile)
+
+
+from reportlab.pdfgen import canvas
+
+c = canvas.Canvas('ace_report.pdf')
+
+f = open('ace_report.txt', 'r')
+
+i = 800
+for x in f:
+    c.drawString(50, i, x)
+    i -= 12
+    if i <= 20:
+        i = 800
+        c.showPage()
+
+c.save()
+
+f.close()
+
+
+
+
+#  Upload report to s3 bucket
+user_choice = raw_input("PDF report file generated for backup, Do you wish to store it in S3?[Yes/No]")
+
+if user_choice.lower() != 'yes':
+    print("Fine, thank you...")
+    subprocess.call(["rm", "ace_report.pdf"])
+    subprocess.call(["rm", "ace_report.txt"])
+    sys.exit(1)
+
+
+bucket = raw_input("Enter bucket name: ")
+key = raw_input("Enter filename with path: ")
+
+subprocess.call(["aws", "s3api", "put-object", "--bucket", bucket, "--key", key, "--body", "ace_report.pdf"])
+
+subprocess.call(["rm", "ace_report.pdf"])
+subprocess.call(["rm", "ace_report.txt"])
+
+
